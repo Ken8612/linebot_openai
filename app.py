@@ -94,8 +94,15 @@ def handle_message(event):
                     reply_msg = f'找不到 {date_str} 的金額記錄'
             else:
                 reply_msg = '指令格式錯誤，請使用「刪除金額 yyyy.mm.dd」的格式'
+        elif msg == '刪除所有金額':
+            if group_id in group_amounts:
+                del group_amounts[group_id]
+                save_group_amounts()  # 儲存更新後的金額記錄
+                reply_msg = '已刪除所有金額記錄'
+            else:
+                reply_msg = '目前沒有記錄任何金額'
         else:
-            reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」、「查詢總金額」或「刪除金額 yyyy.mm.dd」'
+            reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」、「查詢總金額」、「刪除金額 yyyy.mm.dd」或「刪除所有金額」'
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         

@@ -5,6 +5,7 @@ from linebot.models import *
 import os
 import traceback
 from datetime import datetime
+import json
 
 app = Flask(__name__)
 
@@ -15,6 +16,16 @@ handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
 # 記錄群組的日期與金額
 group_amounts = {}
+
+# 檢查是否有儲存過的金額記錄檔案，若有則載入
+if os.path.exists('group_amounts.json'):
+    with open('group_amounts.json', 'r', encoding='utf-8') as f:
+        group_amounts = json.load(f)
+
+# 儲存金額記錄到檔案
+def save_group_amounts():
+    with open('group_amounts.json', 'w', encoding='utf-8') as f:
+        json.dump(group_amounts, f, ensure_ascii=False, indent=4)
 
 # 處理訊息
 @app.route("/callback", methods=['POST'])
@@ -53,11 +64,12 @@ def handle_message(event):
                     date = datetime.strptime(date_str, '%Y.%m.%d').date()  # 使用 %Y 修正年份格式
                     if group_id in group_amounts:
                         if user_id in group_amounts[group_id]:
-                            group_amounts[group_id][user_id].append((date, amount))
+                            group_amounts[group_id][user_id].append((date_str, amount))
                         else:
-                            group_amounts[group_id][user_id] = [(date, amount)]
+                            group_amounts[group_id][user_id] = [(date_str, amount)]
                     else:
-                        group_amounts[group_id] = {user_id: [(date, amount)]}
+                        group_amounts[group_id] = {user_id: [(date_str, amount)]}
+                    save_group_amounts()  # 儲存更新後的金額記錄
                     reply_msg = f'已記錄 {date_str} 的金額 {amount}'
                 else:
                     reply_msg = '金額格式錯誤，請輸入有效的數字'
@@ -65,13 +77,25 @@ def handle_message(event):
                 reply_msg = '指令格式錯誤，請使用「記錄金額 yyyy.mm.dd $金額」的格式'
         elif msg == '查詢總金額':
             if group_id in group_amounts and len(group_amounts[group_id]) > 0:
-                total_amount = sum(amount for user_id in group_amounts[group_id] for _, amount in group_amounts[group_id][user_id])
-                records = '\n'.join(f'{date.strftime("%Y-%m-%d")}: ${amount}' for user_id in group_amounts[group_id] for date, amount in group_amounts[group_id][user_id])
+                total_amount = sum(amount for user_id in group_amounts[group_id] for date_str, amount in group_amounts[group_id][user_id])
+                records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id] for date_str, amount in group_amounts[group_id][user_id])
                 reply_msg = f'總金額: ${total_amount}\n記錄:\n{records}'
             else:
                 reply_msg = '目前沒有記錄任何金額'
+        elif msg.startswith('刪除金額 '):
+            parts = msg.split(' ')
+            if len(parts) == 2:
+                date_str = parts[1]
+                if group_id in group_amounts and user_id in group_amounts[group_id]:
+                    group_amounts[group_id][user_id] = [(d, a) for d, a in group_amounts[group_id][user_id] if d != date_str]
+                    save_group_amounts()  # 儲存更新後的金額記錄
+                    reply_msg = f'已刪除 {date_str} 的所有金額記錄'
+                else:
+                    reply_msg = f'找不到 {date_str} 的金額記錄'
+            else:
+                reply_msg = '指令格式錯誤，請使用「刪除金額 yyyy.mm.dd」的格式'
         else:
-            reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」或「查詢總金額」'
+            reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」、「查詢總金額」或「刪除金額 yyyy.mm.dd」'
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         

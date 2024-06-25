@@ -13,8 +13,8 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# 記錄使用者的日期與金額
-user_amounts = {}
+# 記錄群組的日期與金額
+group_amounts = {}
 
 # 處理訊息
 @app.route("/callback", methods=['POST'])
@@ -40,6 +40,7 @@ def index():
 def handle_message(event):
     msg = event.message.text
     user_id = event.source.user_id
+    group_id = event.source.group_id
     
     try:
         if msg.startswith('記錄金額 '):
@@ -50,19 +51,22 @@ def handle_message(event):
                 if amount_str.replace('.', '', 1).isdigit():  # 檢查是否為有效的金額格式
                     amount = float(amount_str)
                     date = datetime.strptime(date_str, '%Y.%m.%d').date()  # 使用 %Y 修正年份格式
-                    if user_id in user_amounts:
-                        user_amounts[user_id].append((date, amount))
+                    if group_id in group_amounts:
+                        if user_id in group_amounts[group_id]:
+                            group_amounts[group_id][user_id].append((date, amount))
+                        else:
+                            group_amounts[group_id][user_id] = [(date, amount)]
                     else:
-                        user_amounts[user_id] = [(date, amount)]
+                        group_amounts[group_id] = {user_id: [(date, amount)]}
                     reply_msg = f'已記錄 {date_str} 的金額 {amount}'
                 else:
                     reply_msg = '金額格式錯誤，請輸入有效的數字'
             else:
                 reply_msg = '指令格式錯誤，請使用「記錄金額 yyyy.mm.dd $金額」的格式'
         elif msg == '查詢總金額':
-            if user_id in user_amounts and len(user_amounts[user_id]) > 0:
-                total_amount = sum(amount for _, amount in user_amounts[user_id])
-                records = '\n'.join(f'{date.strftime("%Y-%m-%d")}: ${amount}' for date, amount in user_amounts[user_id])
+            if group_id in group_amounts and len(group_amounts[group_id]) > 0:
+                total_amount = sum(amount for user_id in group_amounts[group_id] for _, amount in group_amounts[group_id][user_id])
+                records = '\n'.join(f'{date.strftime("%Y-%m-%d")}: ${amount}' for user_id in group_amounts[group_id] for date, amount in group_amounts[group_id][user_id])
                 reply_msg = f'總金額: ${total_amount}\n記錄:\n{records}'
             else:
                 reply_msg = '目前沒有記錄任何金額'

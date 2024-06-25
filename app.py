@@ -57,6 +57,7 @@ def handle_message(event):
         if msg == '指令':
             reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」、「記錄匯款 yyyy.mm.dd $金額」、「記錄待開發票 $金額 廠商名字」、「查詢總金額」、「刪除金額 yyyy.mm.dd」、「刪除匯款 yyyy.mm.dd」或「刪除待開發票 $金額 廠商名字」'
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
+        
         elif msg.startswith('記錄金額 '):
             lines = msg.splitlines()
             success_msgs = []
@@ -82,7 +83,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                unpaid_total = sum(amount for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
+                unpaid_records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前待付款總額: ${unpaid_total}\n待付款記錄:\n{unpaid_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -111,7 +114,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                paid_total = sum(amount for user_id in group_amounts[group_id]['paid'] for date_str, amount in group_amounts[group_id]['paid'][user_id])
+                paid_records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id]['paid'] for date_str, amount in group_amounts[group_id]['paid'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前已匯款總額: ${paid_total}\n已匯款記錄:\n{paid_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -139,7 +144,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                invoice_total = sum(amount for user_id in group_amounts[group_id]['invoices'] for amount, supplier in group_amounts[group_id]['invoices'][user_id])
+                invoice_records = '\n'.join(f'${amount} 廠商: {supplier}' for user_id in group_amounts[group_id]['invoices'] for amount, supplier in group_amounts[group_id]['invoices'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前待開發票總額: ${invoice_total}\n待開發票記錄:\n{invoice_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -179,7 +186,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                unpaid_total = sum(amount for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
+                unpaid_records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前待付款總額: ${unpaid_total}\n待付款記錄:\n{unpaid_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -201,7 +210,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                paid_total = sum(amount for user_id in group_amounts[group_id]['paid'] for date_str, amount in group_amounts[group_id]['paid'][user_id])
+                paid_records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id]['paid'] for date_str, amount in group_amounts[group_id]['paid'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前已匯款總額: ${paid_total}\n已匯款記錄:\n{paid_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -228,7 +239,9 @@ def handle_message(event):
             
             if success_msgs:
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '\n'.join(success_msgs)
+                invoice_total = sum(amount for user_id in group_amounts[group_id]['invoices'] for amount, supplier in group_amounts[group_id]['invoices'][user_id])
+                invoice_records = '\n'.join(f'${amount} 廠商: {supplier}' for user_id in group_amounts[group_id]['invoices'] for amount, supplier in group_amounts[group_id]['invoices'][user_id])
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前待開發票總額: ${invoice_total}\n待開發票記錄:\n{invoice_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         

@@ -6,6 +6,7 @@ import os
 import traceback
 
 app = Flask(__name__)
+
 # Channel Access Token
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
@@ -35,11 +36,11 @@ def index():
 def handle_message(event):
     msg = event.message.text
     try:
-        # 直接回應使用者的輸入訊息
-        line_bot_api.reply_message(event.reply_token, TextSendMessage(msg))
+        # 簡單地將使用者的訊息原樣回覆
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
     except Exception as e:
         print(traceback.format_exc())
-        line_bot_api.reply_message(event.reply_token, TextSendMessage('發生錯誤，請稍後再試'))
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text='發生錯誤，請稍後再試'))
 
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))

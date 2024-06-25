@@ -70,7 +70,7 @@ def handle_message(event):
                     else:
                         group_amounts[group_id] = {user_id: [(date_str, amount)]}
                     save_group_amounts()  # 儲存更新後的金額記錄
-                    reply_msg = f'已記錄 {date_str} 的金額 {amount}'
+                    reply_msg = f'已記錄 {date_str} 的貨款 {amount}'
                 else:
                     reply_msg = '金額格式錯誤，請輸入有效的數字'
             else:
@@ -79,9 +79,9 @@ def handle_message(event):
             if group_id in group_amounts and len(group_amounts[group_id]) > 0:
                 total_amount = sum(amount for user_id in group_amounts[group_id] for date_str, amount in group_amounts[group_id][user_id])
                 records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id] for date_str, amount in group_amounts[group_id][user_id])
-                reply_msg = f'總金額: ${total_amount}\n記錄:\n{records}'
+                reply_msg = f'總貨款: ${total_amount}\n記錄:\n{records}'
             else:
-                reply_msg = '目前沒有記錄任何金額'
+                reply_msg = '目前沒有記錄任何貨款'
         elif msg.startswith('刪除金額 '):
             parts = msg.split(' ')
             if len(parts) == 2:
@@ -89,16 +89,16 @@ def handle_message(event):
                 if group_id in group_amounts and user_id in group_amounts[group_id]:
                     group_amounts[group_id][user_id] = [(d, a) for d, a in group_amounts[group_id][user_id] if d != date_str]
                     save_group_amounts()  # 儲存更新後的金額記錄
-                    reply_msg = f'已刪除 {date_str} 的所有金額記錄'
+                    reply_msg = f'已刪除 {date_str} 的所有貨款記錄'
                 else:
-                    reply_msg = f'找不到 {date_str} 的金額記錄'
+                    reply_msg = f'找不到 {date_str} 的貨款記錄'
             else:
                 reply_msg = '指令格式錯誤，請使用「刪除金額 yyyy.mm.dd」的格式'
         elif msg == '刪除所有金額':
             if group_id in group_amounts:
                 del group_amounts[group_id]
                 save_group_amounts()  # 儲存更新後的金額記錄
-                reply_msg = '已刪除所有金額記錄'
+                reply_msg = '已刪除所有金額貨款'
             else:
                 reply_msg = '目前沒有記錄任何金額'
         else:

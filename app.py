@@ -4,6 +4,7 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import *
 import os
 import traceback
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -42,19 +43,30 @@ def handle_message(event):
 
     if msg.startswith('記錄金額 '):
         try:
-            amount = float(msg.split(' ')[1])  # 提取金額
-            if user_id in user_amounts:
-                user_amounts[user_id] += amount
+            parts = msg.split(' ')
+            if len(parts) == 3:
+                date_str = parts[1]
+                amount = float(parts[2].replace('$', '').replace('＄', ''))  # 提取金額
+                date = datetime.strptime(date_str, '%y.%m.%d').date()
+                if user_id in user_amounts:
+                    user_amounts[user_id].append((date, amount))
+                else:
+                    user_amounts[user_id] = [(date, amount)]
+                reply_msg = f'已記錄 {date_str} 的金額 {amount}'
             else:
-                user_amounts[user_id] = amount
-            reply_msg = f'已記錄金額 {amount}，目前總金額為 {user_amounts[user_id]}'
+                reply_msg = '指令格式錯誤，請使用「記錄金額 yy.mm.dd $金額」的格式'
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         except ValueError:
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text='請輸入有效的金額數字'))
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text='金額格式錯誤，請輸入有效的數字'))
+        except Exception as e:
+            print(traceback.format_exc())
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text='發生錯誤，請稍後再試'))
     
     elif msg == '查詢總金額':
-        if user_id in user_amounts:
-            reply_msg = f'您目前的總金額為 {user_amounts[user_id]}'
+        if user_id in user_amounts and len(user_amounts[user_id]) > 0:
+            total_amount = sum(amount for _, amount in user_amounts[user_id])
+            record_msg = '\n'.join(f'{date.strftime("%y.%m.%d")}: ${amount}' for date, amount in user_amounts[user_id])
+            reply_msg = f'您目前的總金額為 {total_amount}\n\n記錄如下:\n{record_msg}'
         else:
             reply_msg = '您尚未有任何記錄的金額'
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))

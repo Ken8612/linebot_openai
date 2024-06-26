@@ -7,7 +7,6 @@ import traceback
 from datetime import datetime
 import json
 import dropbox
-from dropbox.exceptions import AuthError, BadInputError
 
 app = Flask(__name__)
 
@@ -41,27 +40,6 @@ def save_group_amounts():
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
 
-# 檢查Dropbox令牌是否有效，如果過期則更新
-def check_dropbox_token():
-    global dbx
-    try:
-        dbx.users_get_current_account()
-    except (AuthError, BadInputError) as err:
-        if isinstance(err, AuthError) and err.error.is_expired_access_token():
-            # 令牌過期，需要更新
-            try:
-                refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
-                new_access_token = dropbox.refresh_access_token(refresh_token)
-                dbx = dropbox.Dropbox(new_access_token)
-                os.environ['DROPBOX_ACCESS_TOKEN'] = new_access_token
-                print("Dropbox access token has been refreshed successfully.")
-            except Exception as e:
-                print(f"Error refreshing Dropbox access token: {e}")
-                raise
-        else:
-            print(f"Error checking Dropbox token: {err}")
-            raise
-
 # 儲存金額記錄到檔案
 group_amounts = load_group_amounts()
 
@@ -87,9 +65,6 @@ def index():
 # 處理訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
-    global dbx
-    check_dropbox_token()  # 確保Dropbox令牌有效
-
     msg = event.message.text
     user_id = event.source.user_id
     group_id = event.source.group_id

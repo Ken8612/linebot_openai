@@ -27,38 +27,60 @@ def load_group_amounts():
     try:
         _, res = dbx.files_download("/group_amounts.json")
         return json.loads(res.content)
-    except dropbox.exceptions.AuthError:
-        refresh_dropbox_token()
-        return load_group_amounts()  # 重新加載一次
     except Exception as e:
         print(f"Error loading group amounts from Dropbox: {e}")
         return {}
 
-# 更新Dropbox令牌並重新初始化Dropbox物件
-def refresh_dropbox_token():
-    global dbx
-    try:
-        oauth2_access_token = dbx.oauth2_token_refresh()
-        dbx = dropbox.Dropbox(oauth2_access_token)
-        print("Dropbox access token refreshed successfully.")
-    except Exception as e:
-        print(f"Error refreshing Dropbox access token: {e}")
-
-# 儲存金額記錄到檔案
 def save_group_amounts():
     try:
         with open("group_amounts.json", "w") as f:
             json.dump(group_amounts, f, ensure_ascii=False, indent=4)
         with open("group_amounts.json", "rb") as f:
             dbx.files_upload(f.read(), "/group_amounts.json", mode=dropbox.files.WriteMode("overwrite"))
-    except dropbox.exceptions.AuthError:
-        refresh_dropbox_token()
-        save_group_amounts()  # 重新儲存一次
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
 
-# 初始化時載入金額記錄
+# 儲存金額記錄到檔案
 group_amounts = load_group_amounts()
+
+# 檢查存取令牌是否有效
+def is_token_valid():
+    try:
+        # 做一次 Dropbox API 的簡單呼叫來檢查存取令牌是否仍然有效
+        account_info = dbx.users_get_current_account()
+        return True
+    except dropbox.exceptions.AuthError:
+        return False
+
+# 自動更新存取令牌
+def refresh_access_token():
+    global DROPBOX_ACCESS_TOKEN, dbx
+    
+    try:
+        # 使用你的應用程式的授權流程來重新獲取新的存取令牌
+        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(os.getenv('DROPBOX_APP_KEY'), os.getenv('DROPBOX_APP_SECRET'))
+        authorize_url = auth_flow.start()
+        
+        print(f"前往下面的 URL 獲取授權碼：\n{authorize_url}")
+        auth_code = input("請輸入授權碼： ").strip()
+        
+        access_token, refresh_token = auth_flow.finish(auth_code)
+        
+        # 更新存取令牌
+        DROPBOX_ACCESS_TOKEN = access_token
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        
+        print(f"已更新存取令牌：{DROPBOX_ACCESS_TOKEN}")
+        
+        # 在更新存取令牌後，可能需要保存新的存取令牌到某個安全的地方
+        # 如環境變數或資料庫，以便在應用程式重啟後使用
+        
+    except Exception as e:
+        print(f"更新存取令牌時出錯：{e}")
+
+# 調用檢查和更新函數
+if not is_token_valid():
+    refresh_access_token()
 
 # 處理訊息
 @app.route("/callback", methods=['POST'])
@@ -82,6 +104,8 @@ def index():
 # 處理訊息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    global group_amounts
+    
     msg = event.message.text
     user_id = event.source.user_id
     group_id = event.source.group_id

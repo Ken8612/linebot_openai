@@ -27,20 +27,37 @@ def load_group_amounts():
     try:
         _, res = dbx.files_download("/group_amounts.json")
         return json.loads(res.content)
+    except dropbox.exceptions.AuthError:
+        refresh_dropbox_token()
+        return load_group_amounts()  # 重新加載一次
     except Exception as e:
         print(f"Error loading group amounts from Dropbox: {e}")
         return {}
 
+# 更新Dropbox令牌並重新初始化Dropbox物件
+def refresh_dropbox_token():
+    global dbx
+    try:
+        oauth2_access_token = dbx.oauth2_token_refresh()
+        dbx = dropbox.Dropbox(oauth2_access_token)
+        print("Dropbox access token refreshed successfully.")
+    except Exception as e:
+        print(f"Error refreshing Dropbox access token: {e}")
+
+# 儲存金額記錄到檔案
 def save_group_amounts():
     try:
         with open("group_amounts.json", "w") as f:
             json.dump(group_amounts, f, ensure_ascii=False, indent=4)
         with open("group_amounts.json", "rb") as f:
             dbx.files_upload(f.read(), "/group_amounts.json", mode=dropbox.files.WriteMode("overwrite"))
+    except dropbox.exceptions.AuthError:
+        refresh_dropbox_token()
+        save_group_amounts()  # 重新儲存一次
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
 
-# 儲存金額記錄到檔案
+# 初始化時載入金額記錄
 group_amounts = load_group_amounts()
 
 # 處理訊息

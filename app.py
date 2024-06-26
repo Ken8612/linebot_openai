@@ -1,28 +1,26 @@
+import os
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import *
-import os
-import traceback
-from datetime import datetime
-import json
+from linebot.models import TextMessage, TextSendMessage, MessageEvent
 import dropbox
+import json
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Channel Access Token
+# Line Bot 相关配置
 line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
-# Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# Dropbox access token
+# Dropbox 访问令牌配置
 DROPBOX_ACCESS_TOKEN = os.getenv('DROPBOX_ACCESS_TOKEN')
 dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
 
-# 記錄群組的金額與待開發票
+# 记录群组金额与待开发票
 group_amounts = {}
 
-# 檢查是否有儲存過的金額記錄檔案，若有則載入
+# 检查是否有存储的金额记录文件，若有则加载
 def load_group_amounts():
     try:
         _, res = dbx.files_download("/group_amounts.json")
@@ -40,68 +38,62 @@ def save_group_amounts():
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
 
-# 儲存金額記錄到檔案
+# 载入群组金额记录
 group_amounts = load_group_amounts()
 
-# 檢查存取令牌是否有效
+# 检查访问令牌是否有效
 def is_token_valid():
     try:
-        # 做一次 Dropbox API 的簡單呼叫來檢查存取令牌是否仍然有效
+        # 进行一次简单的 Dropbox API 调用来检查访问令牌是否仍然有效
         account_info = dbx.users_get_current_account()
         return True
     except dropbox.exceptions.AuthError:
         return False
 
-# 自動更新存取令牌
+# 刷新访问令牌
 def refresh_access_token():
     global DROPBOX_ACCESS_TOKEN, dbx
     
     try:
-        # 使用你的應用程式的授權流程來重新獲取新的存取令牌
-        auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(os.getenv('DROPBOX_APP_KEY'), os.getenv('DROPBOX_APP_SECRET'))
-        authorize_url = auth_flow.start()
-        
-        print(f"前往下面的 URL 獲取授權碼：\n{authorize_url}")
-        auth_code = input("請輸入授權碼： ").strip()
-        
-        access_token, refresh_token = auth_flow.finish(auth_code)
-        
-        # 更新存取令牌
-        DROPBOX_ACCESS_TOKEN = access_token
+        # 使用 refresh_token 刷新访问令牌
+        refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
+        oauth2_refresh_token = dropbox.oauth2.RefreshAccessToken(refresh_token)
+        DROPBOX_ACCESS_TOKEN = oauth2_refresh_token.refresh_token
         dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
         
         print(f"已更新存取令牌：{DROPBOX_ACCESS_TOKEN}")
         
-        # 在更新存取令牌後，可能需要保存新的存取令牌到某個安全的地方
-        # 如環境變數或資料庫，以便在應用程式重啟後使用
+        # 在更新访问令牌后，保存新的访问令牌
+        # 请确保将新的访问令牌存储在安全的地方，例如环境变量或数据库
+        os.environ['DROPBOX_ACCESS_TOKEN'] = DROPBOX_ACCESS_TOKEN
         
     except Exception as e:
-        print(f"更新存取令牌時出錯：{e}")
+        print(f"更新存取令牌时出错：{e}")
 
-# 調用檢查和更新函數
+# 每次启动应用程序时检查访问令牌是否有效，若无效则刷新
 if not is_token_valid():
     refresh_access_token()
 
-# 處理訊息
+# 处理 Line Bot 的 Webhook 请求
 @app.route("/callback", methods=['POST'])
 def callback():
-    # get X-Line-Signature header value
     signature = request.headers['X-Line-Signature']
-    # get request body as text
     body = request.get_data(as_text=True)
     app.logger.info("Request body: " + body)
-    # handle webhook body
+    
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
+    
     return 'OK'
 
+# 简单的根路径返回 Hello World
 @app.route("/", methods=['GET'])
 def index():
     return 'Hello World! This is a LINE Bot.'
 
-# 處理訊息
+# 处理用户发来的消息
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     global group_amounts
@@ -112,10 +104,10 @@ def handle_message(event):
     
     try:
         if msg == '指令':
-            reply_msg = '請輸入有效指令，如「記錄金額 yyyy.mm.dd $金額」、「記錄匯款 yyyy.mm.dd $金額」、「記錄待開發票 $金額 廠商名字」、「查詢總金額」、「刪除金額 yyyy.mm.dd」、「刪除匯款 yyyy.mm.dd」或「刪除待開發票 $金額 廠商名字」'
+            reply_msg = '请发送有效指令，如「记录金额 yyyy.mm.dd $金额」、「记录汇款 yyyy.mm.dd $金额」、「记录待开发票 $金额 厂商名字」、「查询总金额」、「删除金额 yyyy.mm.dd」、「删除汇款 yyyy.mm.dd」或「删除待开发票 $金额 厂商名字」'
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_msg))
         
-        elif msg.startswith('記錄金額 '):
+        elif msg.startswith('记录金额 '):
             lines = msg.splitlines()
             success_msgs = []
             error_msgs = []
@@ -124,25 +116,25 @@ def handle_message(event):
                 if len(parts) == 3:
                     date_str = parts[1]
                     amount_str = parts[2].replace('$', '').replace('＄', '').strip()
-                    if amount_str.replace('.', '', 1).isdigit():  # 檢查是否為有效的金額格式
+                    if amount_str.replace('.', '', 1).isdigit():  # 检查是否为有效的金额格式
                         amount = float(amount_str)
-                        date = datetime.strptime(date_str, '%Y.%m.%d').date()  # 使用 %Y 修正年份格式
+                        date = datetime.strptime(date_str, '%Y.%m.%d').date()
                         if group_id not in group_amounts:
                             group_amounts[group_id] = {'unpaid': {}, 'paid': {}, 'invoices': {}}
                         if user_id not in group_amounts[group_id]['unpaid']:
                             group_amounts[group_id]['unpaid'][user_id] = []
                         group_amounts[group_id]['unpaid'][user_id].append((date_str, amount))
-                        success_msgs.append(f'已記錄 {date_str} 的貨款 {amount}')
+                        success_msgs.append(f'已记录 {date_str} 的货款 {amount}')
                     else:
-                        error_msgs.append(f'金額格式錯誤: {amount_str}')
+                        error_msgs.append(f'金额格式错误: {amount_str}')
                 else:
-                    error_msgs.append(f'指令格式錯誤: {line}')
+                    error_msgs.append(f'指令格式错误: {line}')
             
             if success_msgs:
-                save_group_amounts()  # 儲存更新後的金額記錄
+                save_group_amounts()
                 unpaid_total = sum(amount for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
                 unpaid_records = '\n'.join(f'{date_str}: ${amount}' for user_id in group_amounts[group_id]['unpaid'] for date_str, amount in group_amounts[group_id]['unpaid'][user_id])
-                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 目前待付款總額: ${unpaid_total}\n待付款記錄:\n{unpaid_records}'
+                reply_msg = '\n'.join(success_msgs) + f'\n\n----- 当前待付款总额: ${unpaid_total}\n待付款记录:\n{unpaid_records}'
             else:
                 reply_msg = '\n'.join(error_msgs)
         
@@ -315,3 +307,4 @@ def handle_message(event):
 if __name__ == "__main__":
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+	

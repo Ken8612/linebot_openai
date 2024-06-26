@@ -6,6 +6,7 @@ import os
 import traceback
 from datetime import datetime
 import json
+import dropbox
 
 app = Flask(__name__)
 
@@ -14,18 +15,33 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
+# Dropbox access token
+DROPBOX_ACCESS_TOKEN = os.getenv('DROPBOX_ACCESS_TOKEN')
+dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+
 # 記錄群組的金額與待開發票
 group_amounts = {}
 
 # 檢查是否有儲存過的金額記錄檔案，若有則載入
-if os.path.exists('group_amounts.json'):
-    with open('group_amounts.json', 'r', encoding='utf-8') as f:
-        group_amounts = json.load(f)
+def load_group_amounts():
+    try:
+        _, res = dbx.files_download("/group_amounts.json")
+        return json.loads(res.content)
+    except Exception as e:
+        print(f"Error loading group amounts from Dropbox: {e}")
+        return {}
+
+def save_group_amounts():
+    try:
+        with open("group_amounts.json", "w") as f:
+            json.dump(group_amounts, f, ensure_ascii=False, indent=4)
+        with open("group_amounts.json", "rb") as f:
+            dbx.files_upload(f.read(), "/group_amounts.json", mode=dropbox.files.WriteMode("overwrite"))
+    except Exception as e:
+        print(f"Error saving group amounts to Dropbox: {e}")
 
 # 儲存金額記錄到檔案
-def save_group_amounts():
-    with open('group_amounts.json', 'w', encoding='utf-8') as f:
-        json.dump(group_amounts, f, ensure_ascii=False, indent=4)
+group_amounts = load_group_amounts()
 
 # 處理訊息
 @app.route("/callback", methods=['POST'])

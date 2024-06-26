@@ -7,7 +7,6 @@ import traceback
 from datetime import datetime
 import json
 import dropbox
-from dropbox.exceptions import AuthError
 
 app = Flask(__name__)
 
@@ -16,7 +15,7 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# Dropbox access token and client
+# Dropbox access token
 DROPBOX_ACCESS_TOKEN = os.getenv('DROPBOX_ACCESS_TOKEN')
 dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
 
@@ -41,26 +40,23 @@ def save_group_amounts():
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
 
-# 儲存金額記錄到檔案
-group_amounts = load_group_amounts()
-
-# 檢查並更新 Dropbox 存取令牌
+# 刷新 Dropbox 存取令牌的函數
 def refresh_access_token():
     try:
         global DROPBOX_ACCESS_TOKEN, dbx
         refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
         if refresh_token:
-            new_token = dbx.oauth2_token_refresh(refresh_token)
-            DROPBOX_ACCESS_TOKEN = new_token.access_token
+            oauth2_access_token = dbx.refresh_access_token(refresh_token)
+            DROPBOX_ACCESS_TOKEN = oauth2_access_token['access_token']
             dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
             print(f"Dropbox access token updated successfully: {DROPBOX_ACCESS_TOKEN}")
         else:
             print("No refresh token found.")
-    except AuthError as e:
+    except dropbox.exceptions.AuthError as e:
         print(f"Error refreshing Dropbox access token: {e}")
 
-# 在啟動時檢查和更新 Dropbox 存取令牌
-refresh_access_token()
+# 儲存金額記錄到檔案
+group_amounts = load_group_amounts()
 
 # 處理訊息
 @app.route("/callback", methods=['POST'])
@@ -291,5 +287,6 @@ def handle_message(event):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text='發生錯誤，請稍後再試'))
 
 if __name__ == "__main__":
+    refresh_access_token()  # 初始時刷新一次存取令牌
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)

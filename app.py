@@ -25,6 +25,9 @@ DROPBOX_CLIENT_SECRET = os.getenv('DROPBOX_CLIENT_SECRET')
 # Dropbox client
 dbx = None
 
+# 記錄群組的金額與待開發票
+group_amounts = {}
+
 # Function to refresh Dropbox access token
 def refresh_access_token():
     global DROPBOX_ACCESS_TOKEN

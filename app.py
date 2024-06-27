@@ -7,6 +7,7 @@ import traceback
 from datetime import datetime
 import json
 import dropbox
+import requests
 
 app = Flask(__name__)
 
@@ -15,46 +16,70 @@ line_bot_api = LineBotApi(os.getenv('CHANNEL_ACCESS_TOKEN'))
 # Channel Secret
 handler = WebhookHandler(os.getenv('CHANNEL_SECRET'))
 
-# Dropbox access token
+# Dropbox tokens and keys
 DROPBOX_ACCESS_TOKEN = os.getenv('DROPBOX_ACCESS_TOKEN')
-dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+DROPBOX_REFRESH_TOKEN = os.getenv('DROPBOX_REFRESH_TOKEN')
+DROPBOX_CLIENT_ID = os.getenv('DROPBOX_CLIENT_ID')
+DROPBOX_CLIENT_SECRET = os.getenv('DROPBOX_CLIENT_SECRET')
 
-# 記錄群組的金額與待開發票
-group_amounts = {}
+# Dropbox client
+dbx = None
 
-# 檢查是否有儲存過的金額記錄檔案，若有則載入
+# Function to refresh Dropbox access token
+def refresh_access_token():
+    global DROPBOX_ACCESS_TOKEN
+    global dbx
+
+    url = "https://api.dropboxapi.com/oauth2/token"
+    data = {
+        'grant_type': 'refresh_token',
+        'refresh_token': DROPBOX_REFRESH_TOKEN,
+        'client_id': DROPBOX_CLIENT_ID,
+        'client_secret': DROPBOX_CLIENT_SECRET
+    }
+    response = requests.post(url, data=data)
+    response_data = response.json()
+
+    if 'access_token' in response_data:
+        DROPBOX_ACCESS_TOKEN = response_data['access_token']
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+        print("Dropbox access token refreshed successfully.")
+    else:
+        print("Failed to refresh Dropbox access token:", response_data)
+
+# Function to get Dropbox client with automatic token refresh
+def get_dropbox_client():
+    global dbx
+    if dbx is None:
+        dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+    try:
+        dbx.users_get_current_account()
+    except dropbox.exceptions.AuthError as err:
+        if err.error.is_expired_access_token():
+            refresh_access_token()
+            dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
+    return dbx
+
+# Load group amounts from Dropbox
 def load_group_amounts():
     try:
+        dbx = get_dropbox_client()
         _, res = dbx.files_download("/group_amounts.json")
         return json.loads(res.content)
     except Exception as e:
         print(f"Error loading group amounts from Dropbox: {e}")
         return {}
 
+# Save group amounts to Dropbox
 def save_group_amounts():
     try:
+        dbx = get_dropbox_client()
         with open("group_amounts.json", "w") as f:
             json.dump(group_amounts, f, ensure_ascii=False, indent=4)
         with open("group_amounts.json", "rb") as f:
             dbx.files_upload(f.read(), "/group_amounts.json", mode=dropbox.files.WriteMode("overwrite"))
     except Exception as e:
         print(f"Error saving group amounts to Dropbox: {e}")
-
-# 刷新 Dropbox 存取令牌的函數
-def refresh_access_token():
-    try:
-        global DROPBOX_ACCESS_TOKEN, dbx
-        refresh_token = os.getenv('DROPBOX_REFRESH_TOKEN')
-        if refresh_token:
-            oauth2_access_token = dbx.refresh_access_token(refresh_token)
-            DROPBOX_ACCESS_TOKEN = oauth2_access_token['access_token']
-            dbx = dropbox.Dropbox(DROPBOX_ACCESS_TOKEN)
-            print(f"Dropbox access token updated successfully: {DROPBOX_ACCESS_TOKEN}")
-        else:
-            print("No refresh token found.")
-    except dropbox.exceptions.AuthError as e:
-        print(f"Error refreshing Dropbox access token: {e}")
-
 # 儲存金額記錄到檔案
 group_amounts = load_group_amounts()
 
